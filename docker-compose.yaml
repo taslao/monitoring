@@ -1,0 +1,80 @@
+services:
+  prometheus:
+    image: prom/prometheus:main
+    container_name: prometheus
+    user: "1000:1000"
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./oci/prometheus/conf:/etc/prometheus:ro
+      - ./oci/prometheus/data:/prometheus
+    networks:
+      - monitoring
+    cap_drop:
+      - ALL  # Drop all capabilities; Prometheus doesn't need elevated privileges.
+
+  grafana:
+    image: grafana/grafana:main
+    container_name: grafana
+    user: "1000:1000"
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD_FILE=/run/secrets/admin_password
+    secrets:
+      - admin_password
+    volumes:
+      - ./oci/grafana/conf:/etc/grafana:ro
+      - ./oci/grafana/conf/grafana.ini:/etc/grafana/grafana.ini:ro
+      - ./oci/grafana/data:/var/lib/grafana
+    networks:
+      - monitoring
+    cap_drop:
+      - ALL  # Grafana can operate without special privileges.
+
+  loki:
+    image: grafana/loki:latest
+    container_name: loki
+    user: "1000:1000"
+    expose:
+      - "3100"
+    volumes:
+      - ./oci/loki/conf/loki-config.yaml:/etc/loki/config.yaml:ro
+      - ./oci/loki/data:/loki
+      - ./oci/loki/data/index:/loki/index
+      - ./oci/loki/data/cache:/loki/cache
+      - ./oci/loki/data/chunks:/loki/chunks
+    networks:
+      - monitoring
+    cap_drop:
+      - ALL  # Loki doesn't need elevated capabilities.
+
+  promtail:
+    image: grafana/promtail:latest
+    container_name: promtail
+#    user: "1000:1000"
+    volumes:
+#      - /var/log:/var/log:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - ./oci/promtail/conf/promtail-config.yaml:/etc/promtail/config.yaml:ro
+      - ./oci/promtail/data:/promtail
+    command: [ "-config.file=/etc/promtail/config.yaml", "-config.expand-env=true"]
+    depends_on:
+      - loki
+    networks:
+      - monitoring
+    cap_drop:
+      - ALL
+    cap_add:
+      - SYSLOG  # Required if Promtail needs to read syslog files.
+
+volumes:
+  grafana-data:
+    external: false  # Using the path defined in the tree structure
+
+secrets:
+  admin_password:
+    file: ./secrets/admin_password
+
+networks:
+  monitoring:

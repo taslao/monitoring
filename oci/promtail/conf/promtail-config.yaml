@@ -1,0 +1,22 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml  # Keeps track of the last read position in logs.
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push  # Loki endpoint for pushing logs.
+
+scrape_configs:
+  - job_name: docker
+    pipeline_stages:
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: docker
+          # Add metadata for each log entry
+          container_name: "{{.ContainerName}}"  # Auto-detected container name
+          log_source: "docker"                # Label to identify log origin
+          __path__: "/var/lib/docker/containers/*/*.log"  # Path to container logs
